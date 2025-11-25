@@ -11,6 +11,7 @@ export enum AppId {
   HARDWARE = 'hardware',
   CRYPTO = 'crypto',
   MUSIC = 'music',
+  START_MENU = 'start_menu',
 }
 
 export type CommandType = 'atk' | 'def' | 'vpn' | 'counter' | 'buff_dodge' | 'cool' | 'buff_ap' | 'scan' | 'shell' | 'macro' | 'sys' | 'multi_atk' | 'passive';
@@ -23,7 +24,8 @@ export interface Command {
   cost: number;
   heat: number;
   desc: string;
-  cooldown?: number;
+  cooldown?: number; // Turns to wait before reuse
+  duration?: number; // Turns the effect lasts
   isConsumable?: boolean; 
 }
 
@@ -83,9 +85,13 @@ export interface Enemy {
   maxHp: number;
   trace: number;
   firewall: number;
+  maxFirewall: number; // Added to track max shield capacity
   attacks: string[];
+  inventory: string[]; // List of Command IDs they possess
   files: LocalFile[];
   isRival?: boolean;
+  isGov?: boolean;
+  cooldowns: Record<string, number>; // Track cooldowns
 }
 
 export interface Mail {
@@ -98,6 +104,7 @@ export interface Mail {
   date: string;
   isSpam?: boolean;
   spamDifficulty?: number; 
+  spamButtonText?: string;
   canReply?: boolean;
 }
 
@@ -174,4 +181,27 @@ export interface PhishingTemplate {
   body: string;
   difficultyReq: number; // Reputation needed
   successRate: number; 
+}
+
+export interface SpamTemplate {
+  subject: string;
+  body: string;
+  sender: string;
+  difficulty: number;
+  buttonText: string;
+}
+
+// NEW: Master Save Structure
+export interface SaveGameData {
+  id: string;
+  timestamp: number;
+  dateString: string;
+  player: PlayerStats;
+  inventory: string[];
+  playerFiles: LocalFile[];
+  worldState: WorldState;
+  rival: RivalState;
+  activeMission: Mission | null;
+  mails: Mail[];
+  icons: { id: string; appId: AppId; x: number; y: number }[];
 }

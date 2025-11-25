@@ -11,14 +11,13 @@ export const Notepad: React.FC = () => {
 
   const copyAll = () => {
     navigator.clipboard.writeText(text).then(() => {
-        // Simple visual feedback could go here
     }).catch(err => {
         console.error('Failed to copy: ', err);
     });
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-100 text-black font-mono">
+    <div className="h-full flex flex-col bg-gray-100 text-black font-jersey">
         <div className="bg-gray-300 px-2 py-1 text-xs border-b border-gray-400 flex gap-2 items-center">
             <span className="font-bold mr-4">Notepad.exe</span>
             <button 
@@ -35,7 +34,7 @@ export const Notepad: React.FC = () => {
             </button>
         </div>
         <textarea 
-            className="flex-1 p-2 resize-none outline-none bg-white text-sm select-text"
+            className="flex-1 p-2 resize-none outline-none bg-white text-lg select-text font-tiny5"
             value={text}
             onChange={handleChange}
             placeholder="System Notes, IP Addresses, Passwords..."

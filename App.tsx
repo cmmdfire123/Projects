@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Taskbar, DesktopIcon, Window, RaidOverlay, BreachAlert } from './components/OSComponents';
+import { Taskbar, DesktopIcon, Window, RaidOverlay, BreachAlert, CrashScreen, StartMenuWindow } from './components/OSComponents';
 import { Terminal } from './components/apps/Terminal';
 import { TorBrowser } from './components/apps/TorBrowser';
 import { MailApp } from './components/apps/Mail';
@@ -9,8 +9,8 @@ import { Notepad } from './components/apps/Notepad';
 import { Hardware } from './components/apps/Hardware';
 import { Crypto } from './components/apps/Crypto';
 import { MusicPlayer } from './components/apps/MusicPlayer';
-import { AppId, WindowState, PlayerStats, Mission, LocalFile, Mail, RivalState, WorldState, BreachState, PhishingTemplate } from './types';
-import { STARTING_INVENTORY, SPAM_TEMPLATES, MISSION_CLIENTS, TARGET_NAMES, FILE_NAMES, MISSION_TEMPLATES, HARDWARE_PARTS, generateRandomString, BREACH_LOGS, PHISHING_TEMPLATES, COMMANDS } from './constants';
+import { AppId, WindowState, PlayerStats, Mission, LocalFile, Mail, RivalState, WorldState, BreachState, PhishingTemplate, SaveGameData } from './types';
+import { STARTING_INVENTORY, SPAM_TEMPLATES, MISSION_CLIENTS, TARGET_NAMES, FILE_NAMES, MISSION_TEMPLATES, HARDWARE_PARTS, generateRandomString, BREACH_LOGS, PHISHING_TEMPLATES, COMMANDS, generateRandomIP, RIVAL_MESSAGES } from './constants';
 
 const APP_ICONS: Record<AppId, { label: string, icon: React.ReactNode }> = {
     [AppId.TERMINAL]: { label: 'TERMINAL', icon: <span className="text-4xl">💻</span> },
@@ -24,6 +24,7 @@ const APP_ICONS: Record<AppId, { label: string, icon: React.ReactNode }> = {
     [AppId.CHROME]: { label: 'CHROME', icon: <span className="text-4xl">🌐</span> }, 
     [AppId.VPN]: { label: 'VPN', icon: <span className="text-4xl">🛡️</span> }, 
     [AppId.MINIGAME]: { label: 'GAME', icon: <span className="text-4xl">🎮</span> }, 
+    [AppId.START_MENU]: { label: 'START', icon: <span className="text-4xl">⚙️</span> },
 };
 
 interface IconData {
@@ -77,12 +78,13 @@ const INITIAL_BREACH: BreachState = {
 };
 
 export default function App() {
-  const [bootState, setBootState] = useState<'off' | 'boot' | 'login' | 'desktop'>('boot');
+  const [bootState, setBootState] = useState<'off' | 'boot' | 'login' | 'desktop' | 'crash'>('boot');
   const [loginPass, setLoginPass] = useState('');
   
   const [windows, setWindows] = useState<WindowState[]>([
+    { id: AppId.START_MENU, title: 'Help & Arsenal', isOpen: true, isMinimized: false, zIndex: 10, position: {x: 50, y: 50} },
     { id: AppId.MAIL, title: 'SecureMail', isOpen: false, isMinimized: false, zIndex: 1, position: {x: 50, y: 50} },
-    { id: AppId.TERMINAL, title: 'ZeroDay Term', isOpen: true, isMinimized: false, zIndex: 2, position: {x: 100, y: 80} },
+    { id: AppId.TERMINAL, title: 'ZeroDay Term', isOpen: false, isMinimized: false, zIndex: 2, position: {x: 100, y: 80} },
     { id: AppId.TOR, title: 'Onion Browser', isOpen: false, isMinimized: false, zIndex: 3, position: {x: 150, y: 100} },
     { id: AppId.EXPLORER, title: 'File Explorer', isOpen: false, isMinimized: false, zIndex: 4, position: {x: 200, y: 150} },
     { id: AppId.NOTEPAD, title: 'Notes', isOpen: false, isMinimized: false, zIndex: 1, position: {x: 300, y: 100} },
@@ -103,9 +105,135 @@ export default function App() {
   const [draggingFile, setDraggingFile] = useState<LocalFile | null>(null);
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [rival, setRival] = useState<RivalState>({ name: 'GhostSec', active: true, aggression: 10, skill: 1, lastActionTime: Date.now(), fundsStolen: 0 });
-  const [mails, setMails] = useState<Mail[]>([{ id: 'm1', sender: 'Unknown', subject: 'Opportunity', date: '2077-10-22', read: false, missionId: 'job_001', body: "Use 'ls' to find 'payroll.dat'.\nUse 'scp payroll.dat' to download it." }]);
+  const [mails, setMails] = useState<Mail[]>([{ id: 'm1', sender: 'Admin', subject: 'Welcome to Zero Day', date: '2077-10-22', read: false, body: "Welcome to the network.\n\nUse the Start Menu to view the Tutorial.\nUse the Terminal to execute hacks.\n\nBe careful. We are watching." }]);
   const [breach, setBreach] = useState<BreachState>(INITIAL_BREACH);
   const [commandQueue, setCommandQueue] = useState<string[]>([]);
+  
+  // Idle tracking
+  const [lastActivity, setLastActivity] = useState(Date.now());
+  
+  // Available Saves State
+  const [availableSaves, setAvailableSaves] = useState<string[]>([]);
+
+  // Check LocalStorage for saves on mount
+  useEffect(() => {
+    const found: string[] = [];
+    ['save001', 'save002', 'save003'].forEach(slot => {
+        if (localStorage.getItem(slot)) found.push(slot);
+    });
+    setAvailableSaves(found);
+  }, []);
+
+  // --- SAVE / LOAD LOGIC ---
+  const handleSaveGame = (slotId: string) => {
+    const saveData: SaveGameData = {
+        id: slotId,
+        timestamp: Date.now(),
+        dateString: new Date().toLocaleString(),
+        player,
+        inventory,
+        playerFiles,
+        worldState,
+        rival,
+        activeMission,
+        mails,
+        icons
+    };
+    
+    try {
+        localStorage.setItem(slotId, JSON.stringify(saveData));
+        setAvailableSaves(prev => prev.includes(slotId) ? prev : [...prev, slotId]);
+        alert(`GAME SAVED TO SLOT: ${slotId}`);
+    } catch (e) {
+        alert("SAVE FAILED: Storage Full or Error.");
+    }
+  };
+
+  const handleLoadGame = (slotId: string) => {
+    try {
+        const json = localStorage.getItem(slotId);
+        if (!json) throw new Error("Save file missing");
+        const data: SaveGameData = JSON.parse(json);
+        applySaveData(data);
+        alert(`LOADED SAVE: ${slotId}`);
+    } catch (e) {
+        alert("LOAD FAILED: Corrupt Save Data.");
+    }
+  };
+
+  const handleExportSave = () => {
+    const saveData: SaveGameData = {
+        id: 'exported_save',
+        timestamp: Date.now(),
+        dateString: new Date().toLocaleString(),
+        player, inventory, playerFiles, worldState, rival, activeMission, mails, icons
+    };
+    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `save001_${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportSave = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data: SaveGameData = JSON.parse(e.target?.result as string);
+            applySaveData(data);
+            alert("SAVE IMPORTED SUCCESSFULLY.");
+        } catch (err) {
+            alert("ERROR: Invalid Save File.");
+        }
+    };
+    reader.readAsText(file);
+  };
+
+  const applySaveData = (data: SaveGameData) => {
+      setPlayer(data.player);
+      setInventory(data.inventory);
+      setPlayerFiles(data.playerFiles);
+      setWorldState(data.worldState);
+      setRival(data.rival);
+      setActiveMission(data.activeMission);
+      setMails(data.mails);
+      setIcons(data.icons);
+      // Reset sensitive states
+      setBootState('desktop'); 
+      setBreach(INITIAL_BREACH);
+  };
+
+  // --- MOUSE ACTIVITY TRACKING ---
+  useEffect(() => {
+      const handleActivity = () => setLastActivity(Date.now());
+      window.addEventListener('keydown', handleActivity);
+      window.addEventListener('mousedown', handleActivity);
+      return () => {
+          window.removeEventListener('keydown', handleActivity);
+          window.removeEventListener('mousedown', handleActivity);
+      }
+  }, []);
+
+  // Check if Terminal is open to prevent idle attacks during battle
+  const isTerminalOpen = windows.find(w => w.id === AppId.TERMINAL)?.isOpen;
+
+  // --- IDLE CHECK LOOP ---
+  useEffect(() => {
+      if(bootState !== 'desktop' || isTerminalOpen) return;
+      
+      const interval = setInterval(() => {
+          if (Date.now() - lastActivity > 60000) { // 60s idle
+             // Force random encounter
+             setCommandQueue(prev => [...prev, `connect ${generateRandomIP()}`]);
+             setLastActivity(Date.now());
+             alert("SYSTEM ALERT: SUSPICIOUS ACTIVITY DETECTED WHILE IDLE.");
+          }
+      }, 10000);
+      return () => clearInterval(interval);
+  }, [lastActivity, bootState, isTerminalOpen]);
 
   // --- DERIVED STATS ---
   useEffect(() => {
@@ -121,6 +249,16 @@ export default function App() {
     }
   }, [bootState]);
 
+  // --- COMMAND QUEUE HANDLER ---
+  useEffect(() => {
+    if (commandQueue.length > 0) {
+        const cmd = commandQueue[0];
+        if (cmd.startsWith('connect')) {
+            openApp(AppId.TERMINAL);
+        }
+    }
+  }, [commandQueue]);
+
   // --- BREACH TIMER LOOP (60 SECONDS) ---
   useEffect(() => {
       if (!breach.active) return;
@@ -130,7 +268,6 @@ export default function App() {
               if (!prev.active) return prev;
               
               // 60s total time. Tick 500ms. 120 ticks.
-              // 100 / 120 = 0.8333 per tick
               const newProgress = prev.progress + (100 / 120); 
               
               if (newProgress >= 100) {
@@ -148,6 +285,15 @@ export default function App() {
   // --- MAIN LOOP ---
   useEffect(() => {
     if (bootState !== 'desktop') return;
+    
+    // Check for crash
+    if (player.hp <= 0) {
+        setBootState('crash');
+        setTimeout(() => {
+            window.location.reload();
+        }, 5000);
+        return;
+    }
 
     const interval = setInterval(() => {
         setWorldState(prev => {
@@ -198,15 +344,16 @@ export default function App() {
 
     }, 5000); 
     return () => clearInterval(interval);
-  }, [bootState, rival, player.activeBots, worldState.raidActive]);
+  }, [bootState, rival, player.activeBots, worldState.raidActive, player.hp]);
 
   const generateProceduralMissionMail = () => {
       const client = MISSION_CLIENTS[Math.floor(Math.random() * MISSION_CLIENTS.length)];
       const template = MISSION_TEMPLATES[Math.floor(Math.random() * MISSION_TEMPLATES.length)];
       const targetName = TARGET_NAMES[Math.floor(Math.random() * TARGET_NAMES.length)];
+      const targetIp = generateRandomIP();
       addMail({
           id: `job_${Date.now()}`, sender: client, subject: `Contract: ${targetName}`, date: `2077-10-${worldState.day}`,
-          read: false, missionId: `mission_${Date.now()}`, body: `Target: ${targetName}\n${template.text}\nReq: ${template.fileType.toUpperCase()}`
+          read: false, missionId: `mission_${Date.now()}`, body: `Target: ${targetName}\nIP: ${targetIp}\n\n${template.text}\nReq: ${template.fileType.toUpperCase()}`
       });
   };
 
@@ -214,14 +361,46 @@ export default function App() {
       const spam = SPAM_TEMPLATES[Math.floor(Math.random() * SPAM_TEMPLATES.length)];
       addMail({
           id: `spam_${Date.now()}`, sender: spam.sender, subject: spam.subject, date: `2077-10-${worldState.day}`,
-          read: false, body: spam.body, isSpam: true, spamDifficulty: spam.difficulty
+          read: false, body: spam.body, isSpam: true, spamDifficulty: spam.difficulty, spamButtonText: spam.buttonText
       });
   };
 
   const handleRivalEvent = () => {
       if (rival.aggression >= 100) return; 
-      if (Math.random() < 0.1) {
-          setRival(prev => ({...prev, aggression: prev.aggression + 5}));
+      
+      const roll = Math.random();
+      if (roll < 0.05) {
+          // Rival Email
+          const taunt = RIVAL_MESSAGES[rival.aggression > 50 ? 'high' : 'low'][0];
+          addMail({
+             id: `rival_${Date.now()}`,
+             sender: rival.name,
+             subject: taunt.subject,
+             date: `2077-10-${worldState.day}`,
+             read: false,
+             body: taunt.body,
+             canReply: true
+          });
+          setRival(prev => ({...prev, aggression: prev.aggression + 2}));
+      } else if (roll > 0.95 && rival.aggression > 30) {
+          // Force Attack
+          setCommandQueue(prev => [...prev, `connect 127.0.0.1`]); // Forced battle on localhost implies incoming
+          alert(`INCOMING CONNECTION REQUEST: ${rival.name}`);
+      }
+  };
+
+  const handleReplyToRival = (mailId: string, tone: 'aggressive' | 'defensive' | 'neutral') => {
+      setMails(prev => prev.map(m => m.id === mailId ? { ...m, canReply: false } : m));
+
+      if (tone === 'aggressive') {
+          setRival(prev => ({ ...prev, aggression: Math.min(100, prev.aggression + 15) }));
+          alert("Rival provoked! Aggression increasing.");
+      } else if (tone === 'defensive') {
+          setRival(prev => ({ ...prev, aggression: Math.max(0, prev.aggression - 5) }));
+          alert("Rival slightly pacified.");
+      } else {
+          setRival(prev => ({ ...prev, aggression: Math.min(100, prev.aggression + 5) }));
+          alert("Rival acknowledges message.");
       }
   };
 
@@ -243,9 +422,13 @@ export default function App() {
   const acceptMission = (mailId: string) => {
     const mail = mails.find(m => m.id === mailId);
     if (mail && mail.missionId) {
+        // Extract IP from body roughly
+        const ipMatch = mail.body.match(/IP: ([\d\.]+)/);
+        const targetIp = ipMatch ? ipMatch[1] : generateRandomIP();
+
         setActiveMission({
             id: mail.missionId, title: mail.subject, client: mail.sender, description: mail.body, faction: 'neutral',
-            targetIp: `192.168.0.${Math.floor(Math.random()*255)}`, difficulty: 1, reward: 500, requiredFilename: FILE_NAMES[0], isCompleted: false
+            targetIp: targetIp, difficulty: 1, reward: 500, requiredFilename: FILE_NAMES[0], isCompleted: false
         });
         setMails(prev => prev.map(m => m.id === mailId ? { ...m, read: true } : m));
         setTimeout(() => openApp(AppId.TERMINAL), 500);
@@ -271,7 +454,7 @@ export default function App() {
                   name: 'LEAKED_DB.txt',
                   type: 'text',
                   value: 0,
-                  content: `TARGET DUMP:\n192.168.1.45 - Admin/Admin\n192.168.1.99 - Root/1234\n10.0.0.5 - High Security`
+                  content: `TARGET DUMP:\n${generateRandomIP()} - Admin/Admin\n${generateRandomIP()} - Root/1234`
               };
               setPlayerFiles(prev => [...prev, dump]);
               alert("Database Downloaded to File Explorer.");
@@ -301,7 +484,7 @@ export default function App() {
       setTimeout(() => {
           const success = Math.random() < template.successRate;
           if (success) {
-              const targetIp = `192.168.1.${Math.floor(Math.random() * 255)}`;
+              const targetIp = generateRandomIP();
               addMail({
                   id: `phish_reply_${Date.now()}`,
                   sender: "Gullible User",
@@ -377,34 +560,57 @@ export default function App() {
           setPlayerFiles(prev => prev.filter(f => f.id !== finalState.targetFileId));
           alert(`SECURITY BREACH FAILED. FILE STOLEN: ${finalState.targetFileName}`);
       } else {
-          setPlayer(prev => ({...prev, money: Math.max(0, prev.money - 100)}));
-          alert(`SECURITY BREACH FAILED. SYSTEM COMPROMISED. $100 STOLEN.`);
+          // Fallback if no files to steal
+          setPlayer(prev => ({...prev, money: Math.max(0, prev.money - 500)}));
+          alert(`SECURITY BREACH FAILED. NO FILES FOUND. $500 DRAINED FROM ACCOUNT.`);
       }
   };
 
+  const handleForceShutdown = () => {
+      setBootState('off');
+      setTimeout(() => setBootState('boot'), 2000);
+  };
+
   return (
-    <div className="w-screen h-screen flex items-center justify-center bg-gray-900 select-none font-sans">
+    <div className="w-screen h-screen flex items-center justify-center bg-gray-900 select-none font-jersey">
       <div className="relative w-[800px] h-[600px] bg-black overflow-hidden shadow-2xl border-8 border-[#333] rounded-lg ring-1 ring-white/10">
         <div className="crt-overlay absolute inset-0 z-[9999] pointer-events-none mix-blend-overlay opacity-30"></div>
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent to-black/30 z-[9998]"></div>
         
         <RaidOverlay active={worldState.raidActive} timer={worldState.raidTimer} />
+        <CrashScreen active={bootState === 'crash'} />
         <BreachAlert breach={breach} />
 
         {bootState === 'boot' && (
-            <div className="h-full flex flex-col justify-center items-center text-green-500 font-mono bg-black">
-                <div className="text-4xl mb-4 animate-pulse font-retro">ZERO_DAY BIOS v5.0</div>
+            <div className="h-full flex flex-col justify-center items-center text-green-500 font-tiny5 bg-black">
+                <div className="text-4xl mb-4 animate-pulse">ZERO_DAY BIOS v5.0</div>
                 <div className="text-xs text-green-700">Loading Kernel... OK</div>
+                {availableSaves.length > 0 && (
+                     <div className="mt-8 text-yellow-500 animate-pulse text-xs">SAVE DATA DETECTED. SYSTEM READY.</div>
+                )}
             </div>
         )}
 
+        {bootState === 'off' && (
+             <div className="h-full bg-black"></div>
+        )}
+
         {bootState === 'login' && (
-             <div className="h-full flex flex-col justify-center items-center text-green-500 font-mono bg-black relative">
-                <div className="text-xl mb-4 font-retro tracking-widest z-10">USER AUTHENTICATION</div>
+             <div className="h-full flex flex-col justify-center items-center text-green-500 font-tiny5 bg-black relative">
+                <div className="text-xl mb-4 tracking-widest z-10">USER AUTHENTICATION</div>
                 <input 
                     type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') setBootState('desktop'); }}
-                    className="z-10 bg-black border-b-2 border-green-500 text-center outline-none text-green-300 w-64" autoFocus
+                    onKeyDown={(e) => { 
+                        if (e.key === 'Enter') {
+                            if (loginPass === 'admin') {
+                                setBootState('desktop');
+                            } else {
+                                alert("ACCESS DENIED: INCORRECT PASSWORD");
+                                setLoginPass('');
+                            }
+                        } 
+                    }}
+                    className="z-10 bg-black border-b-2 border-green-500 text-center outline-none text-green-300 w-64 font-tiny5 text-xl" autoFocus
                 />
              </div>
         )}
@@ -434,12 +640,23 @@ export default function App() {
 
                 {windows.map(w => (
                     <Window key={w.id} state={w} onClose={closeApp} onFocus={focusWindow} onMove={moveWindow}>
+                        {w.id === AppId.START_MENU && (
+                            <StartMenuWindow 
+                                inventory={inventory} 
+                                onSave={handleSaveGame}
+                                onLoad={handleLoadGame}
+                                onExport={handleExportSave}
+                                onImport={handleImportSave}
+                                availableSaves={availableSaves}
+                            />
+                        )}
                         {w.id === AppId.TERMINAL && (
                             <Terminal 
                                 player={player} setPlayer={setPlayer} inventory={inventory} setInventory={setInventory}
                                 activeMission={activeMission} addFile={(f) => setPlayerFiles(p => [...p, f])} playerFiles={playerFiles}
                                 rival={rival} worldState={worldState} setWorldState={setWorldState} setRival={setRival}
                                 breach={breach} onBreachInput={handleBreachInput} commandQueue={commandQueue} clearCommandQueue={() => setCommandQueue([])}
+                                triggerReboot={handleForceShutdown}
                             />
                         )}
                         {w.id === AppId.TOR && (
@@ -450,7 +667,7 @@ export default function App() {
                         {w.id === AppId.MAIL && (
                             <MailApp 
                                 mails={mails} activeMission={activeMission} acceptMission={acceptMission} completeMission={completeMission}
-                                triggerSpam={triggerSpam} draggingFile={draggingFile} replyToRival={() => {}} sendPhishing={sendPhishing} player={player}
+                                triggerSpam={triggerSpam} draggingFile={draggingFile} replyToRival={handleReplyToRival} sendPhishing={sendPhishing} player={player} rival={rival}
                             />
                         )}
                         {w.id === AppId.EXPLORER && <FileExplorer files={playerFiles} setDraggingFile={setDraggingFile} />}
@@ -464,9 +681,10 @@ export default function App() {
                 <Taskbar 
                     windows={windows} 
                     onToggle={(id) => openApp(id)} 
-                    onStart={() => {}} 
+                    onStart={() => openApp(AppId.START_MENU)} 
                     time={new Date().toLocaleTimeString()} 
                     onQueueCommand={(cmd) => setCommandQueue(prev => [...prev, cmd])}
+                    onShutdown={handleForceShutdown}
                 />
             </div>
         )}

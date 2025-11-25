@@ -5,31 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CyberDeck: Zero Day</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Import Jersey 10 and Tiny5 from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Tiny5&display=swap" rel="stylesheet">
     <style>
       body {
         margin: 0;
         background-color: #050505;
-        font-family: 'Fira Code', monospace;
+        font-family: 'Jersey 10', sans-serif; /* Default UI Font */
         overflow: hidden;
       }
+      /* Custom Classes for the Fonts */
+      .font-jersey {
+        font-family: 'Jersey 10', sans-serif;
+      }
+      .font-tiny5 {
+        font-family: 'Tiny5', monospace;
+      }
+
       /* Custom Scrollbar for Cyberpunk feel */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
         background: #0f0f0f;
       }
       ::-webkit-scrollbar-thumb {
         background: #00ff41;
-        border-radius: 3px;
+        border-radius: 0px;
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #00cc33;
-      }
-      .font-retro {
-        font-family: 'VT323', monospace;
       }
       .crt-overlay {
         background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
@@ -53,7 +59,8 @@
   "imports": {
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
   }
 }
 </script>
